@@ -1,0 +1,39 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap");
+
+:root {
+  --bg: #f3efe5;
+  --bg-accent: #ece3cf;
+  --rail: #f6ecd4;
+  --panel: #ffffff;
+  --panel-strong: #fff8e6;
+  --ink: #1c1a14;
+  --muted: #6a6252;
+  --accent: #e07a3f;
+  --accent-strong: #cf5a1d;
+  --border: #e2d7c3;
+  --shadow: 0 18px 40px rgba(20, 14, 5, 0.12);
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  font-family: "Space Grotesk", "Bahnschrift", "Segoe UI Variable", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background-color: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+.selectable {
+  -webkit-user-select: text;
+  user-select: text;
+}
