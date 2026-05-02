@@ -84,7 +84,8 @@
           title="Restaurar último save da nuvem"
         >
           <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M13 3a9 9 0 00-9 9H1l3.89 3.89.07.14L9 12H6a7 7 0 017-7 7 7 0 017 7 7 7 0 01-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0013 21a9 9 0 000-18z"/>
+            <path d="M12 3v10.2l3.4-3.4 1.4 1.4-5.8 5.8-5.8-5.8 1.4-1.4 3.4 3.4V3h2z"/>
+            <path d="M5 19h14v2H5z"/>
           </svg>
         </button>
 

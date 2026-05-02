@@ -45,7 +45,7 @@
 
   .title {
     display: grid;
-    gap: 6px;
+    gap: 2px;
   }
 
   .eyebrow {
