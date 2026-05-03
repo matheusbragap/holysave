@@ -15,6 +15,7 @@ pub struct Game {
     pub save_path: Option<String>, // local save game (pode nao ter sido encontrado)
 
     pub status: GameStatus,
+    pub is_tool: bool,
     pub checksum: Option<String>, // pode nao ter sido criado ainda
     pub is_ignored: bool,
 }

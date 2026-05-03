@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.matheusdev.holysave",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm run dev:vite",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../build"

@@ -1,21 +1,17 @@
 <script lang="ts">
   /**
-   * Página principal: biblioteca Steam, capas, barra de destino de backup.
+   * Página principal: biblioteca Steam, capas e filtros.
    * Processo: docs/codigo-fonte/frontend/rotas.md
    */
   import { onMount } from "svelte";
   import { page } from "$app/stores";
-  import { invoke } from "@tauri-apps/api/core";
   import AppShell from "$lib/components/layout/AppShell.svelte";
   import PageHeader from "$lib/components/layout/PageHeader.svelte";
   import StatusBanner from "$lib/components/ui/StatusBanner.svelte";
   import GameList from "$lib/features/game-library/GameList.svelte";
-  import { getDefaultBackupDirectory } from "$lib/services/backup-path";
   import { scanSteamGames } from "$lib/services/steam";
   import { getSteamGridCovers } from "$lib/services/steamgriddb";
   import type { Game } from "$lib/types/game";
-
-  const BACKUP_DEST_STORAGE_KEY = "holysave.backupDestination";
 
   const currentRoute = $derived(
     $page.url.pathname.startsWith("/configuracoes") ? "Configuracoes" : "Biblioteca"
@@ -24,46 +20,8 @@
   let games = $state<Game[]>([]);
   let isLoading = $state(true);
   let error = $state<string | null>(null);
-  /** Valor atual no campo (pode divergir do confirmado). */
-  let backupPathDraft = $state("");
-  /** Destino efectivo para backup aberto pasta; só muda ao confirmar. */
-  let backupPathCommitted = $state("");
-  /** Exemplo real com o utilizador atual (Rust). */
-  let backupPathPlaceholder = $state(
-    String.raw`C:\Users\...\Documents\HolySave`
-  );
-  let isBackingUp = $state(false);
-
-  /** Só permite escrever após clicar no ícone de editar (o campo não abre edição só com foco/clique). */
-  let backupPathEditing = $state(false);
-  let backupPathInputRef = $state<HTMLInputElement | undefined>();
-  /** Campo + ícones de editar / confirmar (cliques fora disso cancelam a edição). */
-  let backupPathShellRef = $state<HTMLDivElement | undefined>();
-
-  let backupPathDirty = $derived(
-    backupPathDraft.trim() !== backupPathCommitted.trim()
-  );
   let viewMode = $state<"grid" | "list">("grid");
   let coverUrls = $state<Record<string, string>>({});
-
-  const canOpenBackupPath = $derived(
-    backupPathDraft.trim().length > 0 ||
-      backupPathPlaceholder.trim().length > 0
-  );
-  /** Rascunho preenchido ou vazio mas com pasta padrão resolvível (substitui vazio pela padrão ao confirmar). */
-  const canApplyBackupPath = $derived(
-    backupPathEditing &&
-      backupPathDirty &&
-      (backupPathDraft.trim().length > 0 ||
-        backupPathPlaceholder.trim().length > 0)
-  );
-  const canBackup = $derived(
-    !isLoading &&
-      !isBackingUp &&
-      !backupPathDirty &&
-      backupPathCommitted.trim().length > 0 &&
-      games.length > 0
-  );
   async function loadGames() {
     isLoading = true;
     error = null;
@@ -80,81 +38,8 @@
     }
   }
 
-  async function initBackupDestination() {
-    try {
-      const systemDefault = await getDefaultBackupDirectory();
-      backupPathPlaceholder = systemDefault;
-
-      let initial = systemDefault;
-      try {
-        const stored = localStorage.getItem(BACKUP_DEST_STORAGE_KEY)?.trim();
-        if (stored) initial = stored;
-      } catch {
-        /* private mode / quota */
-      }
-
-      backupPathCommitted = initial;
-      backupPathDraft = initial;
-    } catch {
-      backupPathPlaceholder = String.raw`C:\Users\...\Documents\HolySave`;
-    }
-  }
-
-  function confirmBackupDestination() {
-    const trimmed = backupPathDraft.trim();
-    const next = trimmed || backupPathPlaceholder.trim();
-    if (!next) return;
-    backupPathCommitted = next;
-    backupPathDraft = next;
-    try {
-      localStorage.setItem(BACKUP_DEST_STORAGE_KEY, next);
-    } catch {
-      /* ignorar */
-    }
-  }
-
-  function startEditingBackupDestination() {
-    backupPathEditing = true;
-    queueMicrotask(() => backupPathInputRef?.focus());
-  }
-
-  function applyBackupDestinationAndLeaveEditMode() {
-    const fallback = backupPathPlaceholder.trim();
-    if (!backupPathDraft.trim() && !fallback) return;
-    confirmBackupDestination();
-    backupPathEditing = false;
-  }
-
-  /** Reverte para o último diretório confirmado e sai do modo edição. */
-  function cancelBackupPathEdit() {
-    if (!backupPathEditing) return;
-    backupPathDraft = backupPathCommitted;
-    backupPathEditing = false;
-  }
-
-  function onBackupPathKeydown(e: KeyboardEvent) {
-    if (!backupPathEditing) return;
-    if (e.key === "Enter" && canApplyBackupPath) {
-      e.preventDefault();
-      applyBackupDestinationAndLeaveEditMode();
-    }
-    if (e.key === "Escape") {
-      e.preventDefault();
-      cancelBackupPathEdit();
-    }
-  }
-
-  function onDocumentPointerDown(e: PointerEvent) {
-    if (!backupPathEditing || !backupPathShellRef) return;
-    const t = e.target;
-    if (!(t instanceof Node)) return;
-    if (backupPathShellRef.contains(t)) return;
-    cancelBackupPathEdit();
-  }
-
   onMount(() => {
     void loadGames();
-    void initBackupDestination();
   });
 
   async function loadCoverUrls(nextGames: Game[]) {
@@ -174,31 +59,7 @@
     }
   }
 
-  async function handleOpenBackupFolder() {
-    const trimmed =
-      backupPathDraft.trim() || backupPathPlaceholder.trim();
-    if (!trimmed) return;
-
-    try {
-      await invoke("open_folder", { path: trimmed });
-    } catch {
-      /* invoke failed */
-    }
-  }
-
-  async function handleBackupNow() {
-    if (!canBackup) return;
-
-    isBackingUp = true;
-    try {
-      await Promise.resolve();
-    } finally {
-      isBackingUp = false;
-    }
-  }
 </script>
-
-<svelte:window onpointerdown={onDocumentPointerDown} />
 
 <AppShell>
   <div slot="topbar">
@@ -206,139 +67,159 @@
   </div>
 
   <div class="floating-bar">
-    <div class="path-stack">
-      <label for="backup-path">Destino do backup</label>
-      <div class="path-row">
-        <div
-          bind:this={backupPathShellRef}
-          class="path-input-shell"
-          class:path-input-shell--dirty={backupPathDirty}
-          class:path-input-shell--editing={backupPathEditing}
-        >
+    <div class="bar-row">
+      <div class="quick-search">
+        <label for="quick-search" class="sr-only">Pesquisa rápida</label>
+        <div class="search-shell">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M11 19a8 8 0 100-16 8 8 0 000 16zm7 2l-3.5-3.5"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+            />
+          </svg>
           <input
-            bind:this={backupPathInputRef}
-            id="backup-path"
-            type="text"
-            class="path-field"
-            class:path-field--locked={!backupPathEditing}
-            spellcheck="false"
-            autocomplete="off"
-            readonly={!backupPathEditing}
-            tabindex={backupPathEditing ? 0 : -1}
-            placeholder={backupPathPlaceholder}
-            bind:value={backupPathDraft}
-            onkeydown={onBackupPathKeydown}
+            id="quick-search"
+            type="search"
+            placeholder="Nome, app id, pasta, backup..."
+            aria-label="Pesquisar jogos"
           />
-          {#if !backupPathEditing}
-            <button
-              type="button"
-              class="path-slot path-slot--edit"
-              onclick={startEditingBackupDestination}
-              title="Editar destino do backup"
-              aria-label="Editar destino do backup"
-            >
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M12 19h9M5.71 13.71l11-11a3 3 0 014.24 4.24l-11 11-6 2 2-6z"
-                />
-              </svg>
-            </button>
-          {:else if canApplyBackupPath}
-            <button
-              type="button"
-              class="path-slot path-slot--apply"
-              onclick={applyBackupDestinationAndLeaveEditMode}
-              title="Confirmar pasta de destino"
-              aria-label="Confirmar pasta de destino"
-            >
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path
-                  stroke="currentColor"
-                  stroke-width="2"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  d="M6 13l4 4L18 9"
-                />
-              </svg>
-            </button>
+          <span class="search-hint">/ para focar</span>
+        </div>
+      </div>
+
+      <div class="bar-actions">
+        <details class="filter-dropdown">
+          <summary class="filter-toggle" aria-label="Abrir filtros">
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M3 5h18l-6.5 7.2V19l-5 0v-6.8L3 5z" />
+            </svg>
+            <span class="filter-toggle-label">Filtros</span>
+            <span class="filter-toggle-badge">0</span>
+          </summary>
+
+          <div class="filter-panel" aria-label="Filtros da biblioteca">
+            <div class="filter-head">
+              <div>
+                <span class="filter-title">Filtros da biblioteca</span>
+                <span class="filter-sub">Refine, ordene e encontre jogos em segundos.</span>
+              </div>
+              <div class="filter-actions">
+                <button type="button" class="ghost-btn">Limpar tudo</button>
+                <button type="button" class="ghost-btn">Salvar preset</button>
+              </div>
+            </div>
+
+            <div class="filter-grid">
+              <div class="filter-card">
+                <label>Ordenar por</label>
+                <div class="toggle-grid" role="group" aria-label="Ordenacao">
+                  <button type="button" class="toggle-pill is-selected" aria-pressed="true">
+                    <span class="toggle-label">Nome</span>
+                    <span class="toggle-pair" aria-hidden="true">
+                      <span class="toggle-option is-on">A-Z</span>
+                      <span class="toggle-sep">/</span>
+                      <span class="toggle-option">Z-A</span>
+                    </span>
+                  </button>
+                  <button type="button" class="toggle-pill" aria-pressed="false">
+                    <span class="toggle-label">Backup</span>
+                    <span class="toggle-pair" aria-hidden="true">
+                      <span class="toggle-option is-on">Recente</span>
+                      <span class="toggle-sep">/</span>
+                      <span class="toggle-option">Antigo</span>
+                    </span>
+                  </button>
+                  <button type="button" class="toggle-pill" aria-pressed="false">
+                    <span class="toggle-label">Save</span>
+                    <span class="toggle-pair" aria-hidden="true">
+                      <span class="toggle-option is-on">Maior</span>
+                      <span class="toggle-sep">/</span>
+                      <span class="toggle-option">Menor</span>
+                    </span>
+                  </button>
+                  <button type="button" class="toggle-pill" aria-pressed="false">
+                    <span class="toggle-label">Jogo</span>
+                    <span class="toggle-pair" aria-hidden="true">
+                      <span class="toggle-option is-on">Maior</span>
+                      <span class="toggle-sep">/</span>
+                      <span class="toggle-option">Menor</span>
+                    </span>
+                  </button>
+                </div>
+                <div class="toggle-hint">So um filtro ativo por vez. Clique para alternar.</div>
+              </div>
+
+              <div class="filter-card">
+                <label>Backup</label>
+                <div class="pill-row">
+                  <button type="button" class="pill is-selected" aria-pressed="true">
+                    Todos os jogos
+                  </button>
+                  <button type="button" class="pill">Apenas com backup</button>
+                  <button type="button" class="pill">Ignorados</button>
+                </div>
+              </div>
+
+              <div class="filter-card">
+                <label>Tipo</label>
+                <div class="pill-row">
+                  <button type="button" class="pill is-selected" aria-pressed="true">
+                    Jogos e ferramentas
+                  </button>
+                  <button type="button" class="pill">Somente jogos</button>
+                  <button type="button" class="pill">Somente ferramentas</button>
+                </div>
+              </div>
+
+              <div class="filter-card">
+                <label>Plataforma</label>
+                <div class="pill-row">
+                  <button type="button" class="pill is-selected" aria-pressed="true">Steam</button>
+                  <button type="button" class="pill">GOG</button>
+                  <button type="button" class="pill">Epic Games</button>
+                  <button type="button" class="pill">Manual</button>
+                </div>
+              </div>
+
+              <div class="filter-card">
+                <label>Status de backup</label>
+                <div class="pill-row">
+                  <button type="button" class="pill pill--good">Synced</button>
+                  <button type="button" class="pill pill--warn">Pending</button>
+                  <button type="button" class="pill pill--info">Uploading</button>
+                  <button type="button" class="pill pill--danger">Error</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <button
+          class="icon-btn view-btn"
+          type="button"
+          onclick={() => (viewMode = viewMode === "grid" ? "list" : "grid")}
+          aria-pressed={viewMode === "grid"}
+          title={viewMode === "grid" ? "Mudar para lista" : "Mudar para grade"}
+          aria-label={viewMode === "grid" ? "Mudar para lista" : "Mudar para grade"}
+        >
+          {#if viewMode === "grid"}
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M4 6h2v2H4V6zm4 0h12v2H8V6zM4 11h2v2H4v-2zm4 0h12v2H8v-2zM4 16h2v2H4v-2zm4 0h12v2H8v-2z" />
+            </svg>
           {:else}
-            <button
-              type="button"
-              class="path-slot path-slot--idle"
-              onclick={() => cancelBackupPathEdit()}
-              title="Fechar modo de edição (sem alterações)"
-              aria-label="Fechar modo de edição sem alterações"
-            >
-              <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path
-                  stroke="currentColor"
-                  stroke-width="1.75"
-                  stroke-linecap="round"
-                  d="M6 13l4 4L18 9"
-                />
-              </svg>
-            </button>
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z" />
+            </svg>
           {/if}
-        </div>
-        <div class="button-row">
-          <button
-            class="icon-btn open-path"
-            type="button"
-            onclick={handleOpenBackupFolder}
-            disabled={!canOpenBackupPath}
-            aria-label="Abrir pasta do backup"
-            title="Abrir pasta do backup"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M3 6a2 2 0 012-2h5l2 2h7a2 2 0 012 2v2H3V6z" />
-              <path d="M3 10h18l-2 9H5l-2-9z" />
-            </svg>
-          </button>
-          <button
-            class="icon-btn backup-btn"
-            type="button"
-            onclick={handleBackupNow}
-            disabled={!canBackup}
-            aria-label="Backup agora"
-            title={backupPathDirty
-              ? "Confirme o destino (✓ ao lado do caminho ou Enter) antes do backup"
-              : !backupPathEditing && backupPathDraft.trim().length > 0
-                ? "Backup agora"
-                : "Configure e confirme o destino do backup primeiro"}
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M12 3v10.2l3.4-3.4 1.4 1.4-5.8 5.8-5.8-5.8 1.4-1.4 3.4 3.4V3h2z" />
-              <path d="M5 19h14v2H5z" />
-            </svg>
-          </button>
-          <button
-            class="icon-btn view-btn"
-            type="button"
-            onclick={() => (viewMode = viewMode === "grid" ? "list" : "grid")}
-            aria-pressed={viewMode === "grid"}
-            title={viewMode === "grid" ? "Mudar para lista" : "Mudar para grade"}
-            aria-label={viewMode === "grid" ? "Mudar para lista" : "Mudar para grade"}
-          >
-            {#if viewMode === "grid"}
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M4 6h2v2H4V6zm4 0h12v2H8V6zM4 11h2v2H4v-2zm4 0h12v2H8v-2zM4 16h2v2H4v-2zm4 0h12v2H8v-2z" />
-              </svg>
-            {:else}
-              <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z" />
-              </svg>
-            {/if}
-          </button>
-        </div>
+        </button>
       </div>
-      <div class="count">
-        <span class="count-number">{isLoading ? "..." : games.length}</span>
-        <span class="count-label">jogos</span>
-      </div>
+    </div>
+
+    <div class="bar-count">
+      <span class="count-number">{isLoading ? "..." : games.length}</span>
+      <span class="count-label">jogos</span>
     </div>
   </div>
 
@@ -357,8 +238,8 @@
     top: calc(var(--topbar-height) + 16px);
     z-index: 2;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: stretch;
     gap: 12px;
     padding: 10px 14px;
     margin-bottom: 20px;
@@ -368,167 +249,356 @@
     box-shadow: var(--shadow);
   }
 
-  .path-stack {
-    display: grid;
-    gap: 6px;
-    flex: 1;
-    min-width: min(520px, 100%);
-  }
-
-  .path-stack label {
-    font-size: 0.65rem;
-    text-transform: uppercase;
-    letter-spacing: 0.16em;
-    color: var(--muted);
-  }
-
-  .path-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
-  }
-
-  .path-input-shell {
-    flex: 1 1 320px;
-    min-width: 220px;
+  .bar-row {
     display: flex;
     align-items: center;
-    position: relative;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: #fff;
-    transition:
-      border-color 0.15s ease,
-      box-shadow 0.15s ease;
+    justify-content: flex-start;
+    gap: 8px;
   }
 
-  .path-input-shell--dirty {
-    border-color: rgba(224, 122, 63, 0.55);
-    box-shadow: 0 0 0 2px rgba(224, 122, 63, 0.12);
-  }
-
-  .path-input-shell--editing:not(.path-input-shell--dirty) {
-    border-color: rgba(224, 122, 63, 0.28);
-  }
-
-  .path-field {
-    flex: 1 1 auto;
-    min-width: 0;
-    border: none;
-    border-radius: 10px;
-    padding: 7px 10px;
-    padding-right: 40px;
-    background: transparent;
-    color: var(--ink);
-    font: inherit;
-  }
-
-  .path-field:focus {
-    outline: none;
-  }
-
-  .path-field--locked {
-    cursor: default;
-    color: var(--muted);
-    text-overflow: ellipsis;
-  }
-
-  .path-field::placeholder {
-    color: #9a917f;
-    opacity: 1;
-  }
-
-  .path-slot {
-    position: absolute;
-    top: 50%;
-    right: 6px;
-    transform: translateY(-50%);
-    width: 30px;
-    height: 30px;
-    border: none;
-    border-radius: 8px;
-    display: grid;
-    place-items: center;
-    cursor: pointer;
-    color: var(--muted);
-    background: transparent;
-    transition:
-      transform 0.12s ease,
-      background 0.15s,
-      color 0.15s,
-      opacity 0.15s;
-  }
-
-  .path-slot:hover {
-    background: rgba(0, 0, 0, 0.04);
-    color: var(--accent-strong);
-  }
-
-  .path-slot svg {
-    width: 18px;
-    height: 18px;
-    display: block;
-  }
-
-  .path-slot--edit:hover {
-    color: var(--ink);
-  }
-
-  .path-slot--apply {
-    color: rgba(106, 98, 82, 0.85);
-    border: 1px solid rgba(226, 215, 195, 0.9);
-    background: rgba(255, 255, 255, 0.7);
-    transform: translateY(-50%) scale(0.98);
-  }
-
-  .path-slot--apply:hover {
-    color: var(--ink);
-    border-color: rgba(224, 122, 63, 0.35);
-    background: rgba(255, 250, 240, 0.95);
-  }
-
-  .path-slot--idle {
-    color: var(--muted);
-    opacity: 0.72;
-    border: none;
-  }
-
-  .path-slot--idle:hover {
-    opacity: 1;
-    color: var(--muted);
-  }
-
-  .path-slot--idle svg {
-    width: 16px;
-    height: 16px;
-    opacity: 0.82;
-  }
-
-  .button-row {
+  .bar-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
+    align-items: center;
     margin-left: auto;
   }
 
-  .count {
+  .bar-count {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     align-items: baseline;
   }
 
   .count-number {
-    font-size: 1.2rem;
+    font-size: 0.95rem;
     font-weight: 600;
     color: var(--accent-strong);
   }
 
   .count-label {
-    font-size: 0.65rem;
+    font-size: 0.58rem;
     color: var(--muted);
     text-transform: uppercase;
+    letter-spacing: 0.16em;
+  }
+
+  .quick-search {
+    flex: 1;
+    min-width: 280px;
+    max-width: 100%;
+  }
+
+  .quick-search label {
+    display: none;
+  }
+
+  .filter-dropdown {
+    position: relative;
+  }
+
+  .filter-toggle {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    background: #fff;
+    color: var(--muted);
+    font-size: 0.65rem;
+    text-transform: uppercase;
     letter-spacing: 0.18em;
+    cursor: pointer;
+    transition: border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .filter-toggle::-webkit-details-marker {
+    display: none;
+  }
+
+  .filter-toggle svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .filter-toggle-label {
+    font-weight: 600;
+  }
+
+  .filter-toggle-badge {
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 0.58rem;
+    background: rgba(224, 122, 63, 0.15);
+    color: var(--accent-strong);
+  }
+
+  .filter-dropdown[open] .filter-toggle {
+    border-color: rgba(224, 122, 63, 0.5);
+    color: var(--accent-strong);
+    box-shadow: 0 10px 18px rgba(224, 122, 63, 0.15);
+    background: #fff7ea;
+  }
+
+  .filter-panel {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: 0;
+    width: min(760px, 92vw);
+    margin-top: 0;
+    padding: 14px;
+    border-radius: 18px;
+    border: 1px solid rgba(226, 215, 195, 0.85);
+    background:
+      radial-gradient(circle at 10% 10%, rgba(255, 236, 198, 0.55), transparent 55%),
+      radial-gradient(circle at 90% 0%, rgba(255, 250, 234, 0.8), transparent 60%),
+      linear-gradient(140deg, #fff9f0, #ffffff);
+    box-shadow: 0 18px 30px rgba(36, 24, 12, 0.08);
+    z-index: 3;
+  }
+
+  .filter-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .filter-title {
+    display: block;
+    font-family: "Fraunces", "Playfair Display", "Georgia", serif;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .filter-sub {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.72rem;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+
+  .filter-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .ghost-btn {
+    border-radius: 999px;
+    border: 1px dashed rgba(191, 171, 140, 0.7);
+    background: rgba(255, 255, 255, 0.75);
+    color: var(--muted);
+    padding: 6px 12px;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 0.2s ease, color 0.2s ease;
+  }
+
+  .ghost-btn:hover {
+    border-color: rgba(224, 122, 63, 0.5);
+    color: var(--accent-strong);
+  }
+
+  .filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 12px;
+  }
+
+  .filter-card {
+    border-radius: 14px;
+    border: 1px solid rgba(228, 217, 198, 0.85);
+    background: rgba(255, 255, 255, 0.7);
+    padding: 12px;
+  }
+
+  .filter-card label {
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: rgba(90, 78, 62, 0.7);
+    display: block;
+    margin-bottom: 8px;
+  }
+
+  .quick-search {
+    flex: 1;
+    min-width: 280px;
+    max-width: 100%;
+  }
+
+  .quick-search label {
+    display: none;
+  }
+
+  .search-shell {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid rgba(224, 122, 63, 0.35);
+    background: #fff;
+    box-shadow: inset 0 0 0 1px rgba(255, 244, 224, 0.7);
+  }
+
+  .search-shell svg {
+    width: 18px;
+    height: 18px;
+    color: rgba(144, 122, 92, 0.9);
+  }
+
+  .search-shell input {
+    border: none;
+    background: transparent;
+    font: inherit;
+    color: var(--ink);
+    min-width: 0;
+  }
+
+  .search-shell input:focus {
+    outline: none;
+  }
+
+  .search-hint {
+    font-size: 0.65rem;
+    color: rgba(128, 110, 88, 0.7);
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255, 244, 220, 0.7);
+    border: 1px solid rgba(224, 122, 63, 0.18);
+  }
+
+  .pill-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .pill {
+    border-radius: 999px;
+    border: 1px solid rgba(210, 195, 170, 0.9);
+    padding: 6px 12px;
+    font-size: 0.72rem;
+    background: rgba(255, 255, 255, 0.9);
+    color: rgba(88, 74, 55, 0.85);
+    cursor: pointer;
+    transition: transform 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .pill:hover {
+    transform: translateY(-1px);
+    border-color: rgba(224, 122, 63, 0.45);
+    color: var(--accent-strong);
+  }
+
+  .pill.is-selected {
+    border-color: rgba(224, 122, 63, 0.55);
+    background: linear-gradient(135deg, #fff2dc, #fffdf7);
+    color: var(--accent-strong);
+    box-shadow: 0 6px 16px rgba(224, 122, 63, 0.12);
+  }
+
+  .toggle-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+  }
+
+  .toggle-pill {
+    border-radius: 14px;
+    border: 1px solid rgba(210, 195, 170, 0.9);
+    background: rgba(255, 255, 255, 0.92);
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    cursor: pointer;
+    color: rgba(88, 74, 55, 0.85);
+    transition: transform 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  }
+
+  .toggle-pill:hover {
+    transform: translateY(-1px);
+    border-color: rgba(224, 122, 63, 0.45);
+    color: var(--accent-strong);
+  }
+
+  .toggle-pill.is-selected {
+    border-color: rgba(224, 122, 63, 0.55);
+    background: linear-gradient(135deg, #fff2dc, #fffdf7);
+    color: var(--accent-strong);
+    box-shadow: 0 8px 16px rgba(224, 122, 63, 0.15);
+  }
+
+  .toggle-label {
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-weight: 600;
+  }
+
+  .toggle-pair {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    border: 1px solid rgba(226, 215, 195, 0.7);
+    background: rgba(255, 255, 255, 0.75);
+    font-size: 0.64rem;
+  }
+
+  .toggle-option {
+    color: rgba(90, 78, 62, 0.7);
+    font-weight: 500;
+  }
+
+  .toggle-option.is-on {
+    color: var(--accent-strong);
+    font-weight: 700;
+  }
+
+  .toggle-sep {
+    color: rgba(130, 112, 86, 0.55);
+  }
+
+  .toggle-hint {
+    margin-top: 8px;
+    font-size: 0.68rem;
+    color: var(--muted);
+  }
+
+
+  .pill--good {
+    border-color: rgba(70, 160, 110, 0.5);
+    color: #2e7d5b;
+  }
+
+  .pill--warn {
+    border-color: rgba(222, 160, 76, 0.6);
+    color: #a4652c;
+  }
+
+  .pill--info {
+    border-color: rgba(92, 148, 214, 0.6);
+    color: #2f5f9f;
+  }
+
+  .pill--danger {
+    border-color: rgba(214, 92, 92, 0.6);
+    color: #b43a3a;
   }
 
   .icon-btn {
@@ -544,29 +614,6 @@
   .icon-btn svg {
     width: 18px;
     height: 18px;
-  }
-
-  .open-path {
-    border: 1px solid rgba(224, 122, 63, 0.35);
-    background: #fff4dc;
-    color: var(--accent-strong);
-  }
-
-  .backup-btn {
-    color: #fff;
-    background: linear-gradient(135deg, var(--accent), var(--accent-strong));
-    box-shadow: 0 12px 24px rgba(207, 90, 29, 0.25);
-    transition: transform 0.15s ease, box-shadow 0.2s ease;
-  }
-
-  .icon-btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.6;
-    box-shadow: none;
-  }
-
-  .backup-btn:not(:disabled):hover {
-    transform: translateY(-1px);
   }
 
   .view-btn {
@@ -588,8 +635,41 @@
       align-items: flex-start;
     }
 
-    .path-stack {
-      min-width: 100%;
+    .bar-row {
+      flex-direction: column;
+      align-items: stretch;
+      width: 100%;
+      gap: 8px;
+    }
+
+    .quick-search {
+      min-width: auto;
+    }
+
+    .bar-actions {
+      width: 100%;
+      justify-content: flex-start;
+      gap: 8px;
+    }
+
+    .filter-dropdown {
+      flex: 1;
+    }
+
+    .filter-toggle {
+      width: 100%;
+      justify-content: space-between;
+    }
+
+    .filter-panel {
+      position: static;
+      width: 100%;
+      margin-top: 12px;
+    }
+
+    .filter-head {
+      flex-direction: column;
+      align-items: flex-start;
     }
   }
 </style>

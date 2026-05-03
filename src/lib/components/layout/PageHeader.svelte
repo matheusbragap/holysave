@@ -5,8 +5,8 @@
 
 <header class="header">
   <div class="title">
-    <span class="eyebrow">{currentRoute}</span>
     <h1>Holy Save</h1>
+    <span class="eyebrow">{currentRoute}</span>
   </div>
 </header>
 
@@ -26,7 +26,7 @@
 
   .title {
     display: grid;
-    gap: 2px;
+    gap: 6px;
   }
 
   .eyebrow {
