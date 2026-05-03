@@ -1,5 +1,7 @@
 <script lang="ts">
-  import NavigationRail from "$lib/components/NavigationRail.svelte";
+  /** Encaixe desktop: rail + topbar (`docs/codigo-fonte/frontend/lib/componentes/layout.md`). */
+
+  import NavigationRail from "$lib/components/layout/NavigationRail.svelte";
 </script>
 
 <main class="shell">

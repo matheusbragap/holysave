@@ -1,9 +1,25 @@
 <script lang="ts">
+  /**
+   * Lista em grelha ou linhas; abre modal de detalhe e chama invokes por jogo.
+   * Doc: docs/codigo-fonte/frontend/lib/features/game-library.md
+   */
   import type { Game } from "$lib/types/game";
+  import { formatBytes } from "$lib/utils/format-bytes";
+  import GameDetailModal from "./GameDetailModal.svelte";
+  import { deleteGameSave, openFolderPath } from "./game-tauri";
 
-  export let games: Game[] = [];
+  let {
+    games = [],
+    viewMode = "grid",
+    coverUrls = {},
+  }: {
+    games: Game[];
+    viewMode?: "grid" | "list";
+    coverUrls?: Record<string, string>;
+  } = $props();
 
-  let activeMenu: string | null = null;
+  let activeMenu = $state<string | null>(null);
+  let detailGame = $state<Game | null>(null);
 
   function toggleMenu(gameId: string) {
     activeMenu = activeMenu === gameId ? null : gameId;
@@ -13,57 +29,99 @@
     activeMenu = null;
   }
 
-  function handleReload(game: Game) {
-    console.log('Recarregar', game);
+  function openGameDetail(game: Game) {
+    activeMenu = null;
+    detailGame = game;
   }
 
-  function handleUninstall(game: Game) {
-    console.log('Desinstalar jogo', game);
+  function closeGameDetail() {
+    detailGame = null;
   }
 
-  function handleOpenGameFolder(game: Game) {
-    console.log('Abrir local do arquivo do jogo', game);
+  function handleReload(_game: Game) {}
+
+  function handleUninstall(_game: Game) {}
+
+  async function handleOpenGameFolder(game: Game) {
+    await openFolderPath(game.install_dir);
   }
 
-  function handleOpenSaveFolder(game: Game) {
-    console.log('Abrir local do arquivo do save', game);
+  async function handleOpenSaveFolder(game: Game) {
+    await openFolderPath(game.save_path);
   }
 
-  function handleDeleteSave(game: Game) {
-    console.log('Apagar save game', game);
-  }
-
-  function handleRestoreSave(game: Game) {
-    console.log('Restaurar último save da nuvem', game);
-  }
-
-  function formatBytes(value?: number) {
-    if (!value) return null;
-    const units = ["B", "KB", "MB", "GB", "TB"];
-    let size = value;
-    let unitIndex = 0;
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024;
-      unitIndex += 1;
+  async function handleDeleteSave(game: Game) {
+    if (!confirm(`Tem certeza que deseja deletar o save de ${game.name}?`)) {
+      return;
     }
-    return `${size.toFixed(size >= 100 ? 0 : 1)} ${units[unitIndex]}`;
+    await deleteGameSave(game);
+  }
+
+  function handleRestoreSave(_game: Game) {}
+
+  function getCoverUrl(game: Game) {
+    return coverUrls[game.id] ?? null;
   }
 </script>
 
 <svelte:window on:click={closeMenu} />
 
-<div class="game-list">
+<div class="game-list" class:grid={viewMode === "grid"} class:list={viewMode === "list"}>
   {#each games as game}
     <div class="game-card">
-      <div class="info">
-        <strong>{game.name}</strong>
-        <div class="meta">
-          <span class="chip">{game.platform}</span>
-          {#if formatBytes(game.size_bytes)}
-            <span class="size">{formatBytes(game.size_bytes)}</span>
-          {/if}
-        </div>
-      </div>
+      {#if viewMode === "grid"}
+        {@const coverUrl = getCoverUrl(game)}
+        <button
+          type="button"
+          class="card-body card-body-grid"
+          aria-label={`Detalhes: ${game.name}`}
+          on:click|stopPropagation={() => openGameDetail(game)}
+        >
+          <div class="cover">
+            {#if coverUrl}
+              <img
+                src={coverUrl}
+                alt={`Capa de ${game.name}`}
+                loading="lazy"
+              />
+            {:else}
+              <div class="cover-fallback">{game.name}</div>
+            {/if}
+            <div class="title-overlay">
+              <span class="title-badge">{game.name}</span>
+            </div>
+          </div>
+        </button>
+      {:else}
+        {@const coverUrl = getCoverUrl(game)}
+        <button
+          type="button"
+          class="card-body card-body-list"
+          aria-label={`Detalhes: ${game.name}`}
+          on:click|stopPropagation={() => openGameDetail(game)}
+        >
+          <div class="list-thumb">
+            {#if coverUrl}
+              <img
+                src={coverUrl}
+                alt=""
+                loading="lazy"
+              />
+            {:else}
+              <span class="list-thumb-fallback" aria-hidden="true">{game.name.slice(0, 1)}</span>
+            {/if}
+          </div>
+          <div class="info">
+            <strong>{game.name}</strong>
+            <div class="meta">
+              <span class="chip">{game.platform}</span>
+              {#if formatBytes(game.size_bytes)}
+                <span class="size">{formatBytes(game.size_bytes)}</span>
+              {/if}
+            </div>
+          </div>
+        </button>
+      {/if}
 
       <div class="actions">
         <!-- Apagar save -->
@@ -141,12 +199,29 @@
   {/each}
 </div>
 
+{#if detailGame}
+  <GameDetailModal
+    game={detailGame}
+    coverUrl={getCoverUrl(detailGame)}
+    onClose={closeGameDetail}
+  />
+{/if}
+
 <style>
   .game-list {
-    max-width: 980px;
-    margin: 0 auto;
+    width: 100%;
+    margin: 0;
     display: grid;
     gap: 12px;
+  }
+
+  .game-list.list {
+    grid-template-columns: 1fr;
+  }
+
+  .game-list.grid {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    align-items: stretch;
   }
 
   .game-card {
@@ -155,11 +230,151 @@
     align-items: center;
     gap: 12px;
     padding: 16px 20px;
+    width: 100%;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     box-shadow: 0 12px 20px rgba(22, 16, 6, 0.08);
     animation: fadeUp 250ms ease-out;
+  }
+
+  .game-list.grid .game-card {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    align-items: stretch;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .card-body {
+    cursor: pointer;
+    border: none;
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    font: inherit;
+    color: inherit;
+    text-align: inherit;
+    min-width: 0;
+  }
+
+  .card-body:not(:disabled):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .card-body-grid {
+    display: block;
+    width: 100%;
+  }
+
+  .game-list.grid .card-body-grid {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+
+  .card-body-list {
+    display: grid;
+    grid-column: 1 / 3;
+    grid-template-columns: auto 1fr;
+    align-items: center;
+    gap: 12px;
+    text-align: left;
+  }
+
+  .game-list.list .game-card:hover {
+    border-color: rgba(224, 122, 63, 0.35);
+  }
+
+  .game-list.grid .actions {
+    padding: 10px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--panel);
+    justify-content: flex-start;
+  }
+
+  .game-list.list .game-card {
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+  }
+
+  .list-thumb {
+    flex-shrink: 0;
+    width: 44px;
+    aspect-ratio: 2 / 3;
+    border-radius: var(--radius-sm, 6px);
+    background: var(--panel-strong);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .list-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .list-thumb-fallback {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .game-list.list .info {
+    min-width: 0;
+  }
+
+  .cover {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 2 / 3;
+    background: var(--panel-strong);
+    overflow: hidden;
+  }
+
+  .cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .cover-fallback {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    text-align: center;
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .title-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    padding: 12px;
+    background: linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,0.65) 100%);
+  }
+
+  .title-badge {
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.95rem;
+    background: rgba(0, 0, 0, 0.55);
+    padding: 6px 10px;
+    border-radius: 8px;
+    backdrop-filter: blur(4px);
   }
 
   .info {
@@ -329,8 +544,19 @@
   }
 
   @media (max-width: 640px) {
-    .game-card {
+    .game-list.grid .game-card {
       grid-template-columns: 1fr;
+      grid-template-rows: auto auto;
+    }
+
+    .game-list.list .game-card {
+      grid-template-columns: auto 1fr;
+      grid-template-rows: auto auto;
+    }
+
+    .game-list.list .actions {
+      grid-column: 1 / -1;
+      justify-content: flex-end;
     }
   }
 

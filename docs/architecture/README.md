@@ -33,3 +33,11 @@ O Holy Save e um utilitario para Windows 11 que detecta jogos instalados, faz ba
 - Steam: arquivos .acf e pastas em steamapps.
 - Epic: arquivos .item.
 - Ludusavi: manifesto YAML com mapeamento de saves.
+
+## Documentos detalhados
+
+- Steam service: ./steam.md
+
+## Documentação do código (arquivos e fluxos)
+
+Referência ficheiro-a-ficheiro, diagramas Mermaid e tabela `invoke`: [../codigo-fonte/README.md](../codigo-fonte/README.md).

@@ -1,4 +1,6 @@
 <script lang="ts">
+  /** Navegação lateral `/` e `/configuracoes`. */
+
   import { page } from "$app/stores";
 </script>
 

@@ -1,9 +1,19 @@
 <script lang="ts">
-  export let tone: "default" | "error" = "default";
+  /** Faixa curta (`default` | `error`) com conteúdo via `{@render children()}`. */
+
+  import type { Snippet } from "svelte";
+
+  let {
+    tone = "default",
+    children,
+  }: {
+    tone?: "default" | "error";
+    children: Snippet;
+  } = $props();
 </script>
 
 <p class={tone === "error" ? "status error" : "status"}>
-  <slot />
+  {@render children()}
 </p>
 
 <style>

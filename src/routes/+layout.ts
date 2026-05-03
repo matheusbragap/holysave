@@ -1,3 +1,7 @@
+/**
+ * SPA obrigatório com Tauri (sem servidor Node).
+ * Índice: docs/codigo-fonte/frontend/rotas.md
+ */
 // Tauri doesn't have a Node.js server to do proper SSR
 // so we use adapter-static with a fallback to index.html to put the site in SPA mode
 // See: https://svelte.dev/docs/kit/single-page-apps

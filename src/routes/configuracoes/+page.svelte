@@ -1,12 +1,14 @@
 <script lang="ts">
-  import AppShell from "$lib/components/AppShell.svelte";
-  import PageHeader from "$lib/components/PageHeader.svelte";
-  import StatusBanner from "$lib/components/StatusBanner.svelte";
+  /** Placeholder de configurações; mesma casca visual que a biblioteca. */
+
+  import AppShell from "$lib/components/layout/AppShell.svelte";
+  import PageHeader from "$lib/components/layout/PageHeader.svelte";
+  import StatusBanner from "$lib/components/ui/StatusBanner.svelte";
 </script>
 
 <AppShell>
   <div slot="topbar">
-    <PageHeader currentRoute="Configuracoes" showStats={false} showRefresh={false} />
+    <PageHeader currentRoute="Configuracoes" />
   </div>
 
   <StatusBanner>

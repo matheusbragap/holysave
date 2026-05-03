@@ -1,3 +1,7 @@
+/**
+ * Estilo global da app desktop: tokens em :root e regras de base.
+ * Doc: docs/codigo-fonte/frontend/estilo-app-css.md
+ */
 @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap");
 
 :root {
@@ -19,21 +23,17 @@
   background-color: var(--bg);
 }
 
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 html,
 body {
   margin: 0;
-  -webkit-user-select: none;
-  user-select: none;
 }
 
-input,
-textarea,
-[contenteditable="true"],
-.selectable {
-  -webkit-user-select: text;
-  user-select: text;
-}

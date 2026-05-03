@@ -1,3 +1,5 @@
+//! Jogo instalado na UI: dados canónicos e estado de backup previsto.
+
 use serde::{Deserialize, Serialize};
 use std::time::SystemTime;
 
@@ -6,13 +8,13 @@ pub struct Game {
     pub id: String, // app id
     pub name: String,
     pub platform: Platform,
+    pub size_bytes: u64,
 
     pub last_backup: Option<SystemTime>,
     pub install_dir: String,       // dir game
     pub save_path: Option<String>, // local save game (pode nao ter sido encontrado)
 
     pub status: GameStatus,
-    pub size_bytes: u64,
     pub checksum: Option<String>, // pode nao ter sido criado ainda
     pub is_ignored: bool,
 }
