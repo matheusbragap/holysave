@@ -3,3 +3,4 @@
 pub mod steam;
 pub mod filesystem;
 pub mod steamgriddb;
+pub mod db;

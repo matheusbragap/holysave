@@ -11,6 +11,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_steam_path,
             commands::scan_steam_games,
+            commands::load_cached_steam_games,
             commands::get_steamgriddb_covers,
             commands::get_default_backup_directory,
             commands::open_folder,

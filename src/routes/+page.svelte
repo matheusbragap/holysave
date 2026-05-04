@@ -4,12 +4,13 @@
    * Processo: docs/codigo-fonte/frontend/rotas.md
    */
   import { onMount } from "svelte";
+  import { listen } from "@tauri-apps/api/event";
   import { page } from "$app/stores";
   import AppShell from "$lib/components/layout/AppShell.svelte";
   import PageHeader from "$lib/components/layout/PageHeader.svelte";
   import StatusBanner from "$lib/components/ui/StatusBanner.svelte";
   import GameList from "$lib/features/game-library/GameList.svelte";
-  import { scanSteamGames } from "$lib/services/steam";
+  import { loadCachedSteamGames, scanSteamGames } from "$lib/services/steam";
   import { getSteamGridCovers } from "$lib/services/steamgriddb";
   import type { Game } from "$lib/types/game";
 
@@ -22,24 +23,137 @@
   let error = $state<string | null>(null);
   let viewMode = $state<"grid" | "list">("grid");
   let coverUrls = $state<Record<string, string>>({});
+  let isReadyToRender = $state(false);
+  let renderTimedOut = $state(false);
+  let coversReady = $state(false);
+  let scanIdsKnown = $state(false);
+  let pendingValidationIds = new Set<string>();
+  let earlyValidatedIds = new Set<string>();
+  let renderTimeoutHandle: ReturnType<typeof setTimeout> | null = null;
+  let sortOrder = $state<"asc" | "desc">("asc");
+
+  const renderTimeoutMs = 4000;
+
+  const sortedGames = $derived.by(() => {
+    const nextGames = [...games];
+    nextGames.sort((a, b) => {
+      const order = a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+      return sortOrder === "asc" ? order : -order;
+    });
+    return nextGames;
+  });
+
+  function startRenderTimeout() {
+    if (renderTimeoutHandle) {
+      clearTimeout(renderTimeoutHandle);
+    }
+
+    renderTimedOut = false;
+    renderTimeoutHandle = setTimeout(() => {
+      renderTimedOut = true;
+      isReadyToRender = true;
+      isLoading = false;
+    }, renderTimeoutMs);
+  }
+
+  function syncRenderReadiness() {
+    if (renderTimedOut) {
+      return;
+    }
+
+    const ready = scanIdsKnown && pendingValidationIds.size === 0 && coversReady;
+    isReadyToRender = ready;
+    isLoading = !ready;
+
+    if (ready && renderTimeoutHandle) {
+      clearTimeout(renderTimeoutHandle);
+      renderTimeoutHandle = null;
+    }
+  }
+
+  function upsertGame(nextGame: Game) {
+    const existingIndex = games.findIndex((game) => game.id === nextGame.id);
+    if (existingIndex === -1) {
+      games = [...games, nextGame];
+      return;
+    }
+
+    games = games.map((game) => (game.id === nextGame.id ? nextGame : game));
+  }
+
   async function loadGames() {
     isLoading = true;
+    isReadyToRender = false;
     error = null;
+    coversReady = false;
+    scanIdsKnown = false;
+    pendingValidationIds = new Set<string>();
+    earlyValidatedIds = new Set<string>();
+    startRenderTimeout();
 
     try {
-      games = await scanSteamGames();
+      const cachedGames = await loadCachedSteamGames();
+      games = cachedGames;
       void loadCoverUrls(games);
     } catch (err) {
       error = err instanceof Error ? err.message : "Erro ao carregar jogos.";
       games = [];
       coverUrls = {};
-    } finally {
       isLoading = false;
+      return;
     }
+
+    void scanSteamGames()
+      .then((nextGames) => {
+        scanIdsKnown = true;
+        pendingValidationIds = new Set(nextGames.map((game) => game.id));
+        for (const id of earlyValidatedIds) {
+          pendingValidationIds.delete(id);
+        }
+        earlyValidatedIds = new Set<string>();
+        syncRenderReadiness();
+      })
+      .catch((err) => {
+        scanIdsKnown = true;
+        pendingValidationIds = new Set<string>();
+        if (games.length === 0) {
+          error = err instanceof Error ? err.message : "Erro ao atualizar jogos.";
+          isLoading = false;
+          return;
+        }
+        syncRenderReadiness();
+      });
   }
 
   onMount(() => {
+    const unlistenPromise = listen<{ game: Game; valid: boolean }>("steam_game_scan_update", (event) => {
+      const gameId = event.payload.game.id;
+
+      if (!scanIdsKnown) {
+        earlyValidatedIds = new Set([...earlyValidatedIds, gameId]);
+      } else {
+        pendingValidationIds.delete(gameId);
+      }
+
+      if (!event.payload.valid) {
+        games = games.filter((game) => game.id !== gameId);
+        syncRenderReadiness();
+        return;
+      }
+
+      upsertGame(event.payload.game);
+      void loadCoverUrls(games);
+      syncRenderReadiness();
+    });
+
     void loadGames();
+
+    return () => {
+      if (renderTimeoutHandle) {
+        clearTimeout(renderTimeoutHandle);
+      }
+      void unlistenPromise.then((unlisten) => unlisten());
+    };
   });
 
   async function loadCoverUrls(nextGames: Game[]) {
@@ -49,6 +163,8 @@
 
     if (steamIds.length === 0) {
       coverUrls = {};
+      coversReady = true;
+      syncRenderReadiness();
       return;
     }
 
@@ -57,6 +173,9 @@
     } catch {
       coverUrls = {};
     }
+
+    coversReady = steamIds.every((id) => Boolean(coverUrls[id]));
+    syncRenderReadiness();
   }
 
 </script>
@@ -115,12 +234,17 @@
               <div class="filter-card">
                 <label>Ordenar por</label>
                 <div class="toggle-grid" role="group" aria-label="Ordenacao">
-                  <button type="button" class="toggle-pill is-selected" aria-pressed="true">
+                  <button
+                    type="button"
+                    class="toggle-pill is-selected"
+                    aria-pressed={sortOrder === "asc"}
+                    onclick={() => (sortOrder = sortOrder === "asc" ? "desc" : "asc")}
+                  >
                     <span class="toggle-label">Nome</span>
                     <span class="toggle-pair" aria-hidden="true">
-                      <span class="toggle-option is-on">A-Z</span>
+                      <span class="toggle-option" class:is-on={sortOrder === "asc"}>A-Z</span>
                       <span class="toggle-sep">/</span>
-                      <span class="toggle-option">Z-A</span>
+                      <span class="toggle-option" class:is-on={sortOrder === "desc"}>Z-A</span>
                     </span>
                   </button>
                   <button type="button" class="toggle-pill" aria-pressed="false">
@@ -159,17 +283,6 @@
                   </button>
                   <button type="button" class="pill">Apenas com backup</button>
                   <button type="button" class="pill">Ignorados</button>
-                </div>
-              </div>
-
-              <div class="filter-card">
-                <label>Tipo</label>
-                <div class="pill-row">
-                  <button type="button" class="pill is-selected" aria-pressed="true">
-                    Jogos e ferramentas
-                  </button>
-                  <button type="button" class="pill">Somente jogos</button>
-                  <button type="button" class="pill">Somente ferramentas</button>
                 </div>
               </div>
 
@@ -228,7 +341,7 @@
   {:else if error}
     <StatusBanner tone="error">{error}</StatusBanner>
   {:else}
-    <GameList {games} viewMode={viewMode} coverUrls={coverUrls} />
+    <GameList games={sortedGames} viewMode={viewMode} coverUrls={coverUrls} />
   {/if}
 </AppShell>
 

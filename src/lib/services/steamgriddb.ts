@@ -1,7 +1,7 @@
 /**
  * Capas verticais via SteamGridDB (`get_steamgriddb_covers`). Precisa da API key no backend.
  */
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 
 export async function getSteamGridCovers(
   appIds: string[]
@@ -10,5 +10,12 @@ export async function getSteamGridCovers(
     return {};
   }
 
-  return invoke<Record<string, string>>("get_steamgriddb_covers", { appIds });
+  const covers = await invoke<Record<string, string>>("get_steamgriddb_covers", { appIds });
+  const normalized: Record<string, string> = {};
+
+  for (const [appId, path] of Object.entries(covers)) {
+    normalized[appId] = path.startsWith("http") ? path : convertFileSrc(path);
+  }
+
+  return normalized;
 }

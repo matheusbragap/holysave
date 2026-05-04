@@ -1,5 +1,3 @@
-//! Comandos `#[tauri::command]` → frontend `invoke`. Tabela em `docs/codigo-fonte/ponte-tauri-invoke.md`.
-
 use crate::models::game::Game;
 use crate::services::{filesystem, steam, steamgriddb};
 
@@ -17,8 +15,15 @@ pub fn get_steam_path() -> Option<String> {
 
 /// Varre todas as bibliotecas Steam e retorna lista de jogos instalados
 #[tauri::command]
-pub fn scan_steam_games() -> Vec<Game> {
-    steam::scan_steam_games()
+pub fn scan_steam_games(app: tauri::AppHandle) -> Vec<Game> {
+    steam::scan_steam_games(app)
+}
+
+/// Carrega a biblioteca Steam salva localmente no SQLite
+#[tauri::command]
+pub fn load_cached_steam_games() -> Result<Vec<Game>, String> {
+    let mut conn = crate::services::db::open_connection()?;
+    crate::services::db::list_games_by_platform(&mut conn, "Steam")
 }
 
 // ============================================================================
@@ -30,7 +35,7 @@ pub fn scan_steam_games() -> Vec<Game> {
 pub fn get_default_backup_directory() -> Result<String, String> {
     dirs::document_dir()
         .map(|p| p.join("HolySave").to_string_lossy().into_owned())
-        .ok_or_else(|| "Não foi possível localizar a pasta Documentos.".to_owned())
+        .ok_or_else(|| "Nao foi possivel localizar a pasta Documentos.".to_owned())
 }
 
 /// Abre uma pasta no gerenciador padrão do sistema (Explorer no Windows)
